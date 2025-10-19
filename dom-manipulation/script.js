@@ -217,7 +217,7 @@ function setStatus(msg) {
   setTimeout(() => { if (els.syncStatus.textContent === msg) els.syncStatus.textContent = ""; }, 4000);
 }
 
-async function fetchServerQuotes() {
+async function fetchQuotesFromServer() {
   const res = await fetch(SERVER_FETCH_URL);
   const data = await res.json();
   const mapped = data.map(d => ({
@@ -228,6 +228,7 @@ async function fetchServerQuotes() {
   }));
   return mapped;
 }
+
 async function pushLocalChangeSample(payloadCount) {
   try {
     await fetch(SERVER_POST_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ count: payloadCount, ts: nowISO() }) });
