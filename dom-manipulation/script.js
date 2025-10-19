@@ -277,6 +277,12 @@ async function syncWithServer() {
 }
 window.syncWithServer = syncWithServer;
 
+async function syncQuotes() {
+  return syncWithServer();
+}
+window.syncQuotes = syncQuotes;
+
+
 function init() {
   const stored = loadQuotes();
   quotes = stored && stored.length ? stored : [];
