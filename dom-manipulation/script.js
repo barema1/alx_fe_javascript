@@ -1,6 +1,7 @@
 let quotes = [];
 
 const els = {
+  quoteDisplay: document.getElementById("quoteDisplay"),
   quoteText: document.getElementById("quoteText"),
   quoteCategory: document.getElementById("quoteCategory"),
   lastViewed: document.getElementById("lastViewed"),
