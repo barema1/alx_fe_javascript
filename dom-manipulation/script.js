@@ -10,11 +10,17 @@ const els = {
   importFile: document.getElementById("importFile"),
   categoryFilter: document.getElementById("categoryFilter"),
   quotesList: document.getElementById("quotesList"),
+  syncNow: document.getElementById("syncNow"),
+  syncStatus: document.getElementById("syncStatus")
 };
 
 const LS_QUOTES_KEY = "quotes";
 const SS_LAST_VIEWED_KEY = "lastViewedQuote";
 const LS_SELECTED_CATEGORY_KEY = "selectedCategory";
+const LS_LAST_SYNC_KEY = "lastSyncAt";
+
+const SERVER_FETCH_URL = "https://jsonplaceholder.typicode.com/posts?_limit=7";
+const SERVER_POST_URL = "https://jsonplaceholder.typicode.com/posts";
 
 function saveQuotes() {
   localStorage.setItem(LS_QUOTES_KEY, JSON.stringify(quotes));
@@ -25,7 +31,9 @@ function loadQuotes() {
   try {
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      return parsed.filter(q => q && typeof q.text === "string" && typeof q.category === "string");
+      return parsed.filter(q =>
+        q && typeof q.text === "string" && typeof q.category === "string"
+      );
     }
   } catch {}
   return null;
@@ -46,6 +54,12 @@ function saveSelectedCategory(cat) {
 function loadSelectedCategory() {
   return localStorage.getItem(LS_SELECTED_CATEGORY_KEY) || "All";
 }
+function setLastSync(ts) {
+  localStorage.setItem(LS_LAST_SYNC_KEY, ts);
+}
+function getLastSync() {
+  return localStorage.getItem(LS_LAST_SYNC_KEY) || "";
+}
 
 function getUniqueCategories(list) {
   const set = new Set(list.map(q => q.category.trim()).filter(Boolean));
@@ -59,10 +73,16 @@ function getRandomItem(arr) {
   if (!arr.length) return null;
   return arr[Math.floor(Math.random() * arr.length)];
 }
+function nowISO() {
+  return new Date().toISOString();
+}
+function ensureIds(list) {
+  list.forEach(q => { if (!q.id) q.id = "local-" + Date.now() + "-" + Math.random().toString(36).slice(2); if (!q.updatedAt) q.updatedAt = nowISO(); });
+}
 
 function populateCategories() {
   const cats = getUniqueCategories(quotes);
-  const currentSaved = loadSelectedCategory();
+  const saved = loadSelectedCategory();
   els.categoryFilter.innerHTML = "";
   cats.forEach(c => {
     const opt = document.createElement("option");
@@ -70,7 +90,7 @@ function populateCategories() {
     opt.textContent = c;
     els.categoryFilter.appendChild(opt);
   });
-  els.categoryFilter.value = cats.includes(currentSaved) ? currentSaved : "All";
+  els.categoryFilter.value = cats.includes(saved) ? saved : "All";
 }
 
 function createAddQuoteForm() {
@@ -105,7 +125,8 @@ function createAddQuoteForm() {
     const text = iq.value.trim();
     const category = ic.value.trim();
     if (!text || !category) { alert("Please fill both Quote and Category."); return; }
-    quotes.push({ text, category });
+    const q = { id: "local-" + Date.now() + "-" + Math.random().toString(36).slice(2), text, category, updatedAt: nowISO() };
+    quotes.push(q);
     saveQuotes();
     populateCategories();
     iq.value = ""; ic.value = "";
@@ -164,6 +185,7 @@ function importFromJsonFile(event) {
       if (!Array.isArray(imported)) { alert("Invalid file: JSON must be an array of {text, category}."); return; }
       const valid = imported.filter(q => q && typeof q.text === "string" && typeof q.category === "string");
       if (!valid.length) { alert("No valid quotes found in file."); return; }
+      ensureIds(valid);
       quotes.push(...valid);
       saveQuotes();
       populateCategories();
@@ -179,18 +201,84 @@ window.importFromJsonFile = importFromJsonFile;
 function seedDefaultsIfNeeded() {
   if (quotes.length) return;
   quotes = [
-    { text: "The only way to learn a new programming language is by writing programs in it.", category: "programming" },
-    { text: "Simplicity is the soul of efficiency.", category: "productivity" },
-    { text: "First, solve the problem. Then, write the code.", category: "programming" },
-    { text: "Whether you think you can, or you think you can’t—you’re right.", category: "mindset" },
-    { text: "It always seems impossible until it’s done.", category: "mindset" }
+    { id: "srv-101", text: "The only way to learn a new programming language is by writing programs in it.", category: "programming", updatedAt: nowISO() },
+    { id: "srv-102", text: "Simplicity is the soul of efficiency.", category: "productivity", updatedAt: nowISO() },
+    { id: "srv-103", text: "First, solve the problem. Then, write the code.", category: "programming", updatedAt: nowISO() },
+    { id: "srv-104", text: "Whether you think you can, or you think you can’t—you’re right.", category: "mindset", updatedAt: nowISO() },
+    { id: "srv-105", text: "It always seems impossible until it’s done.", category: "mindset", updatedAt: nowISO() }
   ];
   saveQuotes();
 }
 
+function setStatus(msg) {
+  els.syncStatus.textContent = msg;
+  if (!msg) return;
+  setTimeout(() => { if (els.syncStatus.textContent === msg) els.syncStatus.textContent = ""; }, 4000);
+}
+
+async function fetchServerQuotes() {
+  const res = await fetch(SERVER_FETCH_URL);
+  const data = await res.json();
+  const mapped = data.map(d => ({
+    id: "srv-" + d.id,
+    text: String(d.title || "").trim() || "Untitled",
+    category: "server",
+    updatedAt: nowISO()
+  }));
+  return mapped;
+}
+async function pushLocalChangeSample(payloadCount) {
+  try {
+    await fetch(SERVER_POST_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ count: payloadCount, ts: nowISO() }) });
+  } catch {}
+}
+
+function mergeServerData(serverItems) {
+  let added = 0, updated = 0, conflicts = 0;
+  const byId = new Map(quotes.map(q => [q.id, q]));
+  serverItems.forEach(s => {
+    if (!byId.has(s.id)) {
+      quotes.push(s);
+      added += 1;
+    } else {
+      const local = byId.get(s.id);
+      const lu = new Date(local.updatedAt || 0).getTime();
+      const su = new Date(s.updatedAt || 0).getTime();
+      if (su > lu) {
+        local.text = s.text;
+        local.category = s.category;
+        local.updatedAt = s.updatedAt;
+        updated += 1;
+        conflicts += 1;
+      }
+    }
+  });
+  return { added, updated, conflicts };
+}
+
+async function syncWithServer() {
+  try {
+    setStatus("Syncing...");
+    const serverItems = await fetchServerQuotes();
+    const result = mergeServerData(serverItems);
+    saveQuotes();
+    populateCategories();
+    filterQuote();
+    await pushLocalChangeSample(result.added + result.updated);
+    setLastSync(nowISO());
+    if (result.conflicts > 0) setStatus(`Synced • ${result.added} added • ${result.updated} updated • ${result.conflicts} conflicts (server won)`);
+    else if (result.added || result.updated) setStatus(`Synced • ${result.added} added • ${result.updated} updated`);
+    else setStatus("Synced • No changes");
+  } catch (e) {
+    setStatus("Sync failed");
+  }
+}
+window.syncWithServer = syncWithServer;
+
 function init() {
   const stored = loadQuotes();
   quotes = stored && stored.length ? stored : [];
+  ensureIds(quotes);
   seedDefaultsIfNeeded();
   createAddQuoteForm();
   populateCategories();
@@ -201,8 +289,13 @@ function init() {
   els.exportBtn.addEventListener("click", exportToJsonFile);
   els.importFile.addEventListener("change", importFromJsonFile);
   els.categoryFilter.value = loadSelectedCategory();
+  document.getElementById("syncNow").addEventListener("click", syncWithServer);
   filterQuote();
   renderLastViewed();
+  const last = getLastSync();
+  if (last) setStatus("Last sync: " + last);
+  setTimeout(syncWithServer, 1000);
+  setInterval(syncWithServer, 60000);
 }
 
 document.addEventListener("DOMContentLoaded", init);
