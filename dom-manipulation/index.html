@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dynamic Quote Generator</title>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 1rem; margin-top: 1rem; }
+    .row { display: flex; gap: .75rem; flex-wrap: wrap; align-items: center; }
+    label { font-weight: 600; }
+    select, input, button { padding: .6rem .8rem; border-radius: 8px; border: 1px solid #ccc; }
+    button { cursor: pointer; }
+    #quoteText { font-size: 1.25rem; margin: .25rem 0; }
+    #quoteCategory { color: #555; font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <h1>Dynamic Quote Generator</h1>
+
+  
+  <div id="quoteDisplay" class="card">
+    <div id="quoteText">Click “Show New Quote” to begin.</div>
+    <div id="quoteCategory"></div>
+  </div>
+
+  <div id="controls" class="row" style="margin-top: 1rem;">
+    <button id="newQuote">Show New Quote</button>
+  </div>
+
+  <div id="formMount"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>
